@@ -9,9 +9,31 @@ on:
     branches: [main] 
     types: [opened, synchronize] 
 
+env:
+  NOT_SKIP: ${{ github.event_name == 'push' && !contains(join(github.event.commits.*.message), '#skip') }} 
+
 jobs:
+  check_skip:
+    runs-on: ubuntu-latest
+    outputs:
+      should_deploy: ${{ steps.dont_skip.outcome == 'success' }}
+    steps:
+      # 这两条只是打印是否跳过的判断结果
+      - if: ${{ env.NOT_SKIP == 'true' }}
+        run: echo "NOT SKIPPING DEPLOYMENT AND TAGGING"
+      - if: ${{ env.NOT_SKIP == 'false' }}
+        run: echo "SKIPPING DEPLOYMENT AND TAGGING"
+
+      # 如果id为dont_skip的step条件不满足，它的outcome就会是false
+      # 整个job的output就是false
+      - if: ${{ env.NOT_SKIP == 'true' }}
+        id: dont_skip
+        run: echo
+
+
   simple_deployment_pipeline:
     runs-on: ubuntu-latest
+    needs: [check_skip]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -26,15 +48,15 @@ jobs:
       - name: Test
         run: npm run test
       - name: Trigger deployment
-        if: ${{ github.event_name == 'push' }}
+        if: ${{ needs.check_skip.outputs.should_deploy == 'true' }}
         run: curl https://api.render.com/deploy/srv-${{ secrets.RENDER_API_SERVICE_ID }}?key=${{ secrets.RENDER_API_KEY }}
   tag_release:
-    needs: [simple_deployment_pipeline]
+    needs: [simple_deployment_pipeline, check_skip]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - name: Bump version and push tag
-        if: ${{ github.event_name == 'push' }}
+        if: ${{ needs.check_skip.outputs.should_deploy == 'true' }}
         uses: anothrNick/github-tag-action@1.75.0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
