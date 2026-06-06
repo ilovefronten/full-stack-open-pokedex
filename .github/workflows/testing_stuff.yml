@@ -5,6 +5,9 @@ on:
     branches:
       - main
 
+env:
+  JOINED_MESSAGE: ${{ join(github.event.commits.*.message) }}
+
 jobs:
   a_test_job:
     runs-on: ubuntu-latest
@@ -22,6 +25,11 @@ jobs:
         env: 
           COMMIT_MESSAGES: ${{ toJson(github.event.commits.*.message) }}
         run: echo "$COMMIT_MESSAGES"
+      - name: test join expression
+        run: echo "$JOINED_MESSAGE"
+      - name: test contain expression
+        if: contains(env.JOINED_MESSAGE, '#skip')
+        run: 'echo "The message has keyword #skip"'
   
           
   
